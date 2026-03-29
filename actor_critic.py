@@ -32,6 +32,7 @@ class Actor(nn.Module):
         return mu, log_std
 
     def rsample(self, state):
+        state = torch.from_numpy(state)
         mu, log_std = self.forward(state)
         sigma = torch.exp(log_std)
         eps = torch.randn_like(mu)
@@ -42,6 +43,7 @@ class Actor(nn.Module):
         log_pi += -torch.sum(log_std, dim=-1)
         log_pi += -0.5 * ((a - mu) / sigma) @ ((a - mu) / sigma)
 
+        a = a.detach().cpu().numpy()
         return a, log_pi
 
 
