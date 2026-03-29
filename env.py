@@ -9,6 +9,13 @@ episode_over = False
 total_reward = 0
 i = 0
 
+
+from actor_critic import Actor, Critic
+
+
+# Actor()
+
+print(len(observation))
 while not episode_over:
     action = env.action_space.sample()
     observation, reward, terminated, truncated, info = env.step(action)
