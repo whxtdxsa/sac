@@ -61,5 +61,4 @@ class Critic(nn.Module):
 
         return out
 
-    def loss(self):
-
+    # def loss(self):
