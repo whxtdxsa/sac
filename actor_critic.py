@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import math
+
+from utils import gaussian_log_prob
+
+EPSILON = 1e-6
 
 
 class Actor(nn.Module):
@@ -24,22 +27,22 @@ class Actor(nn.Module):
         x = F.relu(self.l2(x))
         out = self.l3(x)
 
-        mu, log_std = torch.split(out, self.action_dim, dim=-1)
+        mu, log_sigma = torch.split(out, self.action_dim, dim=-1)
 
-        # log_std = torch.clamp(log_std, min=-20, max=2)
+        log_sigma = torch.clamp(log_sigma, min=-20, max=2)
 
-        return mu, log_std
+        return mu, log_sigma
 
     def rsample(self, state):
-        mu, log_std = self.forward(state)
-        sigma = torch.exp(log_std)
+        mu, log_sigma = self.forward(state)
+        sigma = torch.exp(log_sigma)
         eps = torch.randn_like(mu)
 
         # Scaling in
-        a = torch.tanh(mu + sigma * eps)
-        log_pi = torch.log(torch.distributions.Normal(mu, sigma).pdf(a))
-        log_pi += -torch.sum(torch.log(1 - torch.tanh(a) ** 2), dim=-1)
-
+        u = mu + sigma * eps
+        a = torch.tanh(u)
+        log_pi_u = gaussian_log_prob(u, mu, sigma, log_sigma)
+        log_pi = log_pi_u - torch.sum(torch.log(1 - a**2 + EPSILON), dim=-1)
         return a, log_pi
 
     def loss(self, state, Q):
@@ -49,22 +52,57 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size):
+    def __init__(self, state_dim, action_dim, hidden_size=256):
         super().__init__()
-        # input_dim: dimension of state and action space
-        self.l1 = nn.Linear(state_dim + action_dim, hidden_size)
-        self.l2 = nn.Linear(hidden_size, hidden_size)
-        self.l3 = nn.Linear(hidden_size, 1)
+        """
+        assume actions are linearly independent
+        output: mean(action_dim), std_(action_dim) 
+        """
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.q_out = 0
 
-    def forward(self, state, action):
-        sa = torch.cat([state, action], dim=-1)
-        x = F.relu(self.l1(sa))
-        x = F.relu(self.l2(x))
-        out = self.l3(x)
+        self.Q1 = nn.Sequential(
+            nn.Linear(state_dim + action_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
 
-        return out
+        self.Q2 = nn.Sequential(
+            nn.Linear(state_dim + action_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
 
-    def loss(self, state, action, reward, next_state, done, V):
-        Q = self.forward(state, action)
-        loss = 1 / 2 * (Q - (reward) + V.forward(next_state)) ** 2
+        self.V = nn.Sequential(
+            nn.Linear(state_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1),
+        )
+
+    def loss_q(self, state, action, reward, next_state, done, alpha=1, gamma=0.9):
+        scaled_reward = reward / (alpha + EPSILON)
+
+        state_action = torch.cat([state, action], dim=-1)
+        q1_out = self.Q1(state_action)
+        q2_out = self.Q2(state_action)
+        self.q_out = min(q1_out, q2_out)
+
+        loss_q1 = 0.5 * (q1_out - scaled_reward - gamma * self.V(next_state)) ** 2
+        loss_q2 = 0.5 * (q2_out - scaled_reward - gamma * self.V(next_state)) ** 2
+
+        return loss_q1, loss_q2
+
+    def loss_v(self, state, action, actor):
+        mu, log_sigma = actor.forward(state)
+        log_pi = gaussian_log_prob(action, mu, torch.exp(log_sigma), log_sigma)
+
+        loss = 0.5 * (self.V(state) - self.q_out + log_pi**2)
+
         return loss
