@@ -3,7 +3,7 @@ import random
 
 
 class ReplayBuffer:
-    def __init__(self, capacity):
+    def __init__(self, capacity=10**6):
         self.buffer = deque(maxlen=capacity)
 
     def insert(self, state, action, reward, next_state, done):

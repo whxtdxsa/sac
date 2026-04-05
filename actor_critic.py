@@ -6,18 +6,17 @@ import math
 
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size):
+    def __init__(self, state_dim, action_dim, hidden_size=256):
         super().__init__()
+        """
+        assume actions are linearly independent
+        output: mean(action_dim), std_(action_dim) 
+        """
         self.state_dim = state_dim
         self.action_dim = action_dim
 
         self.l1 = nn.Linear(state_dim, hidden_size)
         self.l2 = nn.Linear(hidden_size, hidden_size)
-
-        """
-        assume that actions are linearly independent
-        output: mean(action_dim), std_(action_dim) 
-        """
         self.l3 = nn.Linear(hidden_size, 2 * action_dim)
 
     def forward(self, state):
@@ -27,24 +26,26 @@ class Actor(nn.Module):
 
         mu, log_std = torch.split(out, self.action_dim, dim=-1)
 
-        log_std = torch.clamp(log_std, min=-20, max=2)
+        # log_std = torch.clamp(log_std, min=-20, max=2)
 
         return mu, log_std
 
     def rsample(self, state):
-        state = torch.from_numpy(state)
         mu, log_std = self.forward(state)
         sigma = torch.exp(log_std)
         eps = torch.randn_like(mu)
 
-        a = mu + sigma * eps
+        # Scaling in
+        a = torch.tanh(mu + sigma * eps)
+        log_pi = torch.log(torch.distributions.Normal(mu, sigma).pdf(a))
+        log_pi += -torch.sum(torch.log(1 - torch.tanh(a) ** 2), dim=-1)
 
-        log_pi = -0.5 * self.action_dim * math.log(2 * math.pi)
-        log_pi += -torch.sum(log_std, dim=-1)
-        log_pi += -0.5 * ((a - mu) / sigma) @ ((a - mu) / sigma)
-
-        a = a.detach().cpu().numpy()
         return a, log_pi
+
+    def loss(self, state, Q):
+        action, log_pi = self.rsample(state)
+        loss = log_pi - Q.forward(state, action)
+        return loss
 
 
 class Critic(nn.Module):
@@ -63,4 +64,7 @@ class Critic(nn.Module):
 
         return out
 
-    # def loss(self):
+    def loss(self, state, action, reward, next_state, done, V):
+        Q = self.forward(state, action)
+        loss = 1 / 2 * (Q - (reward) + V.forward(next_state)) ** 2
+        return loss
