@@ -5,20 +5,23 @@ from gymnasium.wrappers import RecordVideo
 from actor_critic import Actor, Critic, Value
 from replay_buffer import ReplayBuffer
 
+from utils import get_space_dim
+from utils import ActionTransition
 
-def get_space_dim(space):
-    if isinstance(space, gym.spaces.Box):
-        return space.shape[0]
-    elif isinstance(space, gym.spaces.Discrete):
-        return space.n
+from criterion import Criterion
+from criterion import CriterionByRewardScaling
 
+from tqdm import tqdm
+
+import torch.optim as optim
 
 env = gym.make("Pendulum-v1", render_mode="rgb_array", g=9.81)
 # env = RecordVideo(env, video_folder="./pendulum_videos", episode_trigger=lambda x: True)
 
 state_dim = get_space_dim(env.observation_space)
-action_space = env.action_space
 action_dim = get_space_dim(env.action_space)
+
+action_transition = ActionTransition(env.action_space.low[0], env.action_space.high[0])
 replay_buffer = ReplayBuffer(state_dim, action_dim, 10**6)
 
 batch_size = 256
@@ -27,7 +30,8 @@ ALPHA = 0.2
 TAU = 5e-3
 EPISODES = 1000
 initial_samples = 2000
-
+buffer_size = 10**6
+hidden_size = 256
 
 actor = Actor(state_dim, action_dim, 256)
 critic1 = Critic(state_dim, action_dim, 256)
@@ -36,15 +40,9 @@ value = Value(state_dim, 256)
 target_value = Value(state_dim, 256)
 target_value.load_state_dict(value.state_dict())
 
-
-from utils import Criterion
-from utils import CriterionByRewardScaling
-
 # criterion = Criterion(ALPHA, GAMMA)
 criterion = CriterionByRewardScaling(ALPHA, GAMMA)
 
-
-import torch.optim as optim
 
 optimizer_actor = optim.Adam(actor.parameters(), lr=3e-4)
 optimizer_critic1 = optim.Adam(critic1.parameters(), lr=3e-4)
@@ -52,13 +50,9 @@ optimizer_critic2 = optim.Adam(critic2.parameters(), lr=3e-4)
 optimizer_value = optim.Adam(value.parameters(), lr=3e-4)
 
 
-from tqdm import tqdm
-from utils import ActionTransition
-
-action_transition = ActionTransition(action_space.low[0], action_space.high[0])
-
-reward_list = []
-
+"""
+make initial experience for empty replay_buffer
+"""
 while len(replay_buffer) < initial_samples:
     state, info = env.reset()
 
@@ -74,6 +68,10 @@ while len(replay_buffer) < initial_samples:
             break
 
 
+"""
+sac
+"""
+reward_list = []
 for episode in range(EPISODES):
     state, info = env.reset()
 
