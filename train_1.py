@@ -24,9 +24,9 @@ state_dim = get_space_dim(env.observation_space)
 action_space = env.action_space
 action_dim = get_space_dim(env.action_space)
 replay_buffer = ReplayBuffer(state_dim, action_dim, 10**6)
-batch_size = 128
-GAMMA = 0.9
-ALPHA = 0.2
+batch_size = 256
+GAMMA = 0.99
+ALPHA = 0.20
 
 actor = Actor(state_dim, action_dim, 256)
 critic1 = Critic(state_dim, action_dim, 256)
@@ -49,7 +49,7 @@ from utils import ActionTransition
 action_transition = ActionTransition(action_space.low[0], action_space.high[0])
 
 TAU = 5e-3
-EPISODES = 100
+EPISODES = 1000
 reward_list = []
 
 while len(replay_buffer) < batch_size:
@@ -60,6 +60,7 @@ while len(replay_buffer) < batch_size:
         action = env.action_space.sample()
         next_state, reward, terminated, truncated, info = env.step(action)
         done = terminated or truncated
+        action = action_transition.env2agent(action)
         replay_buffer.insert(state, action, reward, next_state, terminated)
         state = next_state
 
@@ -69,9 +70,9 @@ for episode in tqdm(range(EPISODES)):
 
     done = False
     total_reward = 0.0
-    total_q_min = 0.0
-    total_lp_out = 0.0
-    total_v_out = 0.0
+    total_q_min = []
+    total_lp_out = []
+    total_v_out = []
 
     while not done:
         action, log_pi = actor.rsample(torch.from_numpy(state[None, :]))
@@ -125,15 +126,15 @@ for episode in tqdm(range(EPISODES)):
                 new = TAU * i + (1 - TAU) * j
                 j.copy_(new)
 
-        total_q_min += q_min_c.mean().item()
-        total_lp_out += lp_out.mean().item()
-        total_v_out += v_out.mean().item()
+        total_q_min.append(q_min_c.mean().item())
+        total_lp_out.append(lp_out.mean().item())
+        total_v_out.append(v_out.mean().item())
 
     if (episode + 1) % 10 == 0:
         print(f"------episode {episode + 1}---------")
         print(f"reward: {total_reward}")
         print(
-            f"Q-value: {total_q_min:.2f}, Log-Pi: {total_lp_out:.2f}, V-value: {total_v_out:.2f}"
+            f"Q-value: {sum(total_q_min) / len(total_q_min):.2f}, Log-Pi: {sum(total_lp_out) / len(total_lp_out):.2f}, V-value: {sum(total_v_out) / len(total_v_out):.2f}"
         )
 
     reward_list.append(total_reward)

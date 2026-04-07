@@ -6,9 +6,9 @@ class ReplayBuffer:
         # self.buffer = deque(maxlen=capacity)
         self.state_buffer = torch.zeros(capacity, state_dim, dtype=torch.float32)
         self.action_buffer = torch.zeros(capacity, action_dim, dtype=torch.float32)
-        self.reward_buffer = torch.zeros(capacity, dtype=torch.float32)
+        self.reward_buffer = torch.zeros(capacity, 1, dtype=torch.float32)
         self.next_state_buffer = torch.zeros(capacity, state_dim, dtype=torch.float32)
-        self.done_buffer = torch.zeros(capacity, dtype=torch.bool)
+        self.done_buffer = torch.zeros(capacity, 1, dtype=torch.bool)
         self.capacity = capacity
         self.index = 0
         self.len = 0

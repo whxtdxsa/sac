@@ -42,6 +42,7 @@ class Actor(nn.Module):
         a = torch.tanh(u)
         log_pi_u = gaussian_log_prob(u, mu, sigma, log_sigma)
         log_pi = log_pi_u - torch.sum(torch.log(1 - a**2 + EPSILON), dim=-1).view(-1, 1)
+
         return a, log_pi
 
 
