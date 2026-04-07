@@ -3,14 +3,13 @@ import itertools
 from main import run
 
 param_grid = {
-    "batch_size": [16, 32, 64, 128, 256],
-    "lr": [0.12, 0.09, 0.06, 0.03, 0.01],
-    "model_name": ["test"],
-    "class_name": ["test"],
-    "epochs": [2],
+    "alpha": [0.0, 0.2, 0.5, 0.8],
+    # "hidden_size": [128, 256, 512],
+    # "lr": [1.0e-4, 3.0e-4],
+    # "criterion_name": ["CriterionByRewardScaling", "Criterion"],
 }
 
-# 조합 생성
+# Make combinations
 combinations = list(itertools.product(*param_grid.values()))
 
 with open("config/default.yaml") as f:

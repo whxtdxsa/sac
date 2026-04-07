@@ -1,3 +1,5 @@
 pendulum_videos
 __pycache__
 .venv
+experiments
+ex_*

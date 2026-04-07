@@ -11,6 +11,7 @@ initial_samples: 2000
 hidden_size: 256
 
 # criterion
+criterion_name: Criterion
 gamma: 0.99
 alpha: 0.2
 

@@ -10,7 +10,6 @@ from utils.functions import get_space_dim, ActionTransition
 
 import importlib
 import torch.optim as optim
-import os
 
 
 def run(cfg):
@@ -35,21 +34,16 @@ def run(cfg):
     # Set Seed
     set_seed(seed)
 
-    # Define logging path
-    experiment_name = f"al{alpha}_lr{lr}_hi{hidden_size}"
-    log_dir = f"experiments/{experiment_name}"
-    log_path = f"{log_dir}/metrics.csv"
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-
     # Set Criterion
     module = importlib.import_module("criterion")
     Criterion = getattr(module, criterion_name)
 
     # Set Environment
-    # env = gym.make(
-    #     "MountainCarContinuous-v0", render_mode="rgb_array", goal_velocity=0.1
-    # )
-    env = gym.make("Pendulum-v1", render_mode="rgb_array", g=9.81)
+    env = gym.make(
+        "MountainCarContinuous-v0", render_mode="rgb_array", goal_velocity=0.1
+    )
+    # env = gym.make("Pendulum-v1", render_mode="rgb_array", g=9.81)
+    # env = RecordVideo(env, video_folder="./experiments/pendulum_videos", episode_trigger=lambda x: True)
 
     state_dim = get_space_dim(env.observation_space)
     action_dim = get_space_dim(env.action_space)
@@ -177,13 +171,14 @@ def run(cfg):
             print(
                 f"Q-value: {sum(total_q_min) / len(total_q_min):.2f}, Log-Pi: {sum(total_lp_out) / len(total_lp_out):.2f}, V-value: {sum(total_v_out) / len(total_v_out):.2f}"
             )
-            torch.save(actor.state_dict(), os.path.join(log_dir, f"e_{episode + 1}.pt"))
 
         reward_list.append(total_reward)
     env.close()
     print(f"Episode finished. Total reward: {sum(reward_list) / len(reward_list)}")
 
-    init_csv_log(log_path, ["episode", "reward"])
+    experiment_name = f"al{alpha}_cr{criterion_name}_lr{lr}_hi{hidden_size}"
+    log_path = f"experiments/{experiment_name}/metrics.csv"
+    init_csv_log(log_path, ["epsiode", "reward"])
 
     # Logging
     for episode in range(len(reward_list)):
