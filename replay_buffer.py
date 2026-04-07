@@ -8,7 +8,7 @@ class ReplayBuffer:
         self.action_buffer = torch.zeros(capacity, action_dim, dtype=torch.float32)
         self.reward_buffer = torch.zeros(capacity, 1, dtype=torch.float32)
         self.next_state_buffer = torch.zeros(capacity, state_dim, dtype=torch.float32)
-        self.done_buffer = torch.zeros(capacity, 1, dtype=torch.bool)
+        self.done_buffer = torch.zeros(capacity, 1, dtype=torch.float32)
         self.capacity = capacity
         self.index = 0
         self.len = 0
@@ -18,13 +18,14 @@ class ReplayBuffer:
         action = torch.tensor(action, dtype=torch.float32)
         reward = torch.tensor(reward, dtype=torch.float32)
         next_state = torch.tensor(next_state, dtype=torch.float32)
-        done = torch.tensor(done, dtype=torch.bool)
+        done = torch.tensor(done, dtype=torch.float32)
 
         self.state_buffer[self.index] = state
         self.action_buffer[self.index] = action
         self.reward_buffer[self.index] = reward
         self.next_state_buffer[self.index] = next_state
         self.done_buffer[self.index] = done
+
         self.index = (self.index + 1) % self.capacity
         self.len = min((self.len + 1), self.capacity)
 

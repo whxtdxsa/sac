@@ -5,10 +5,6 @@ from gymnasium.wrappers import RecordVideo
 from actor_critic import Actor, Critic, Value
 from replay_buffer import ReplayBuffer
 
-import torch.optim as optim
-
-from utils import criterion_actor, criterion_value, criterion_critic
-
 
 def get_space_dim(space):
     if isinstance(space, gym.spaces.Box):
@@ -24,18 +20,31 @@ state_dim = get_space_dim(env.observation_space)
 action_space = env.action_space
 action_dim = get_space_dim(env.action_space)
 replay_buffer = ReplayBuffer(state_dim, action_dim, 10**6)
+
 batch_size = 256
 GAMMA = 0.99
-ALPHA = 0.20
+ALPHA = 0.2
+TAU = 5e-3
+EPISODES = 1000
+initial_samples = 2000
+
 
 actor = Actor(state_dim, action_dim, 256)
 critic1 = Critic(state_dim, action_dim, 256)
 critic2 = Critic(state_dim, action_dim, 256)
-value = Value(state_dim, action_dim, 256)
-target_value = Value(state_dim, action_dim, 256)
-
+value = Value(state_dim, 256)
+target_value = Value(state_dim, 256)
 target_value.load_state_dict(value.state_dict())
 
+
+from utils import Criterion
+from utils import CriterionByRewardScaling
+
+# criterion = Criterion(ALPHA, GAMMA)
+criterion = CriterionByRewardScaling(ALPHA, GAMMA)
+
+
+import torch.optim as optim
 
 optimizer_actor = optim.Adam(actor.parameters(), lr=3e-4)
 optimizer_critic1 = optim.Adam(critic1.parameters(), lr=3e-4)
@@ -48,11 +57,9 @@ from utils import ActionTransition
 
 action_transition = ActionTransition(action_space.low[0], action_space.high[0])
 
-TAU = 5e-3
-EPISODES = 1000
 reward_list = []
 
-while len(replay_buffer) < batch_size:
+while len(replay_buffer) < initial_samples:
     state, info = env.reset()
 
     done = False
@@ -63,9 +70,11 @@ while len(replay_buffer) < batch_size:
         action = action_transition.env2agent(action)
         replay_buffer.insert(state, action, reward, next_state, terminated)
         state = next_state
+        if len(replay_buffer) >= initial_samples:
+            break
 
 
-for episode in tqdm(range(EPISODES)):
+for episode in range(EPISODES):
     state, info = env.reset()
 
     done = False
@@ -75,33 +84,40 @@ for episode in tqdm(range(EPISODES)):
     total_v_out = []
 
     while not done:
-        action, log_pi = actor.rsample(torch.from_numpy(state[None, :]))
-        detached_action = action[0].detach().cpu().numpy()
+        """
+        environment interaction
+        """
+        action, log_pi = actor.rsample(torch.from_numpy(state).view(1, -1))
+        action = action.detach().cpu().numpy()[0]
 
         next_state, reward, terminated, truncated, info = env.step(
-            action_transition.agent2env(detached_action)
+            action_transition.agent2env(action)
         )
         done = terminated or truncated
-        total_reward += reward
-        replay_buffer.insert(state, detached_action, reward, next_state, terminated)
+        total_reward += float(reward)
+        replay_buffer.insert(state, action, reward, next_state, terminated)
         state = next_state
 
+        """
+        neural net update
+        """
         b_state, b_action, b_reward, b_next_state, b_terminated = replay_buffer.sample(
             batch_size
         )
 
         a_out, lp_out = actor.rsample(b_state)
         v_out = value.forward(b_state)
-        with torch.no_grad():
-            target = target_value.forward(b_next_state) * (1 + (-1) * b_terminated)
 
         q1_out = critic1.forward(b_state, b_action)
         q2_out = critic2.forward(b_state, b_action)
 
+        with torch.no_grad():
+            target = target_value.forward(b_next_state) * (1 - b_terminated.float())
+
         optimizer_critic1.zero_grad()
         optimizer_critic2.zero_grad()
-        loss_critic1 = criterion_critic(q1_out, target, b_reward, ALPHA, GAMMA)
-        loss_critic2 = criterion_critic(q2_out, target, b_reward, ALPHA, GAMMA)
+        loss_critic1 = criterion.critic(q1_out, target, b_reward)
+        loss_critic2 = criterion.critic(q2_out, target, b_reward)
         loss_critic1.backward()
         loss_critic2.backward()
         optimizer_critic1.step()
@@ -112,14 +128,18 @@ for episode in tqdm(range(EPISODES)):
         q_min_c = torch.min(q1_out_c, q2_out_c)
 
         optimizer_value.zero_grad()
-        loss_value = criterion_value(q_min_c.detach(), v_out, lp_out.detach())
+        loss_value = criterion.value(q_min_c.detach(), v_out, lp_out.detach())
         loss_value.backward()
         optimizer_value.step()
 
         optimizer_actor.zero_grad()
-        loss_actor = criterion_actor(lp_out, q_min_c)
+        loss_actor = criterion.actor(lp_out, q_min_c)
         loss_actor.backward()
         optimizer_actor.step()
+
+        """
+        polyak averaging for target_v
+        """
 
         with torch.no_grad():
             for i, j in zip(value.parameters(), target_value.parameters()):
