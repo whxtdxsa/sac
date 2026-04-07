@@ -37,12 +37,7 @@ class Criterion:
 
         return torch.mean(loss)
 
-    def critic(self, q, v, reward):
-        loss = 0.5 * (q - (reward + self.gamma * v)) ** 2
-
-        return torch.mean(loss)
-
-    def value(self, q, v, log_pi):
-        loss = 0.5 * (v - (q - self.alpha * log_pi)) ** 2
+    def critic(self, q, target_q):
+        loss = 0.5 * (q - target_q) ** 2
 
         return torch.mean(loss)

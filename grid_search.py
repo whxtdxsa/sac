@@ -1,6 +1,6 @@
 import yaml
 import itertools
-from main import run
+from main3 import run
 
 param_grid = {
     "alpha": [0.0, 0.2, 0.5, 0.8],

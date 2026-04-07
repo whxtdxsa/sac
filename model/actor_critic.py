@@ -10,7 +10,7 @@ class Actor(nn.Module):
         super().__init__()
         """
         assume actions are linearly independent
-        output: mean(action_dim), std_(action_dim) 
+        output: mean(action_dim), std(action_dim) 
         """
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -33,7 +33,7 @@ class Actor(nn.Module):
 
     def rsample(self, state):
         """
-        reparametrization trick
+        reparameterization trick
         """
         mu, log_sigma = self.forward(state)
         sigma = torch.exp(log_sigma)
@@ -64,21 +64,3 @@ class Critic(nn.Module):
     def forward(self, state, action):
         state_action = torch.cat([state, action], dim=-1)
         return self.Q(state_action)
-
-
-class Value(nn.Module):
-    def __init__(self, state_dim, hidden_dim=256):
-        super().__init__()
-
-        self.state_dim = state_dim
-
-        self.V = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-        )
-
-    def forward(self, state):
-        return self.V(state)
