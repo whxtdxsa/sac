@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from utils import gaussian_log_prob
+from utils.functions import gaussian_log_prob
 
 EPSILON = 1e-6
 
